@@ -219,7 +219,7 @@ var RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 var SUITS=["♠︎","♥︎","♦︎","♣︎"];
 var SUIT_NAMES=["spades","hearts","diamonds","clubs"];
 var RANK_NAMES=["Ace","2","3","4","5","6","7","8","9","10","Jack","Queen","King"];
-var MAX_PASSES=3, PAIR_POINTS=10, STREAK_STEP=1, CLEAR_BONUS=200;
+var MAX_PASSES=3, PAIR_POINTS=10, STREAK_STEP=10, CLEAR_BONUS=500;
 var SAVE_KEY="pyramid13.game.v1", KSAVE_KEY="pyramid13.klondike.v1", STATS_KEY="pyramid13.stats.v1", SET_KEY="pyramid13.settings.v1";
 
 function val(c){return c%13+1;}
@@ -236,7 +236,7 @@ function save(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch(e){}
 function $(id){return document.getElementById(id);}
 
 var settings={game:"pyramid",hand:"left",draw:1};
-var stats={played:0,won:0,kPlayed:0,kWon:0,pHigh:0};
+var stats={played:0,won:0,kPlayed:0,kWon:0,pHigh10:0};
 var busy=false, cw=46;
 var play=$("play"),stage=$("stage"),kstage=$("kstage"),stockSlot=$("stockSlot"),wasteSlot=$("wasteSlot");
 
@@ -336,7 +336,7 @@ function pSettle(){
     S.over="lose";
   }
   // a finished game, won or lost, counts toward the high score
-  if(S.over&&S.score>stats.pHigh){stats.pHigh=S.score;S.newHigh=true;save(STATS_KEY,stats);}
+  if(S.over&&S.score>stats.pHigh10){stats.pHigh10=S.score;S.newHigh=true;save(STATS_KEY,stats);}
   sel=null;save(SAVE_KEY,S);render();
 }
 function removeRefs(refs){
@@ -348,7 +348,7 @@ function removeRefs(refs){
     var pops=refs.indexOf("u")>=0?2:(refs.indexOf("w")>=0?1:0);
     while(pops-->0)S.waste.pop();
     refs.forEach(function(ref){if(ref[0]==="p")S.pyr[+ref.slice(1)]=null;});
-    // each match in a row is worth one point more than the last; tapping the deck ends the run
+    // each match in a row is worth ten points more than the last; tapping the deck ends the run
     S.score+=PAIR_POINTS+S.streak*STREAK_STEP;S.streak++;
     busy=false;pSettle();
   },reduce?0:180);
@@ -403,7 +403,7 @@ function renderP(){
   if(n>=1)wasteSlot.appendChild(pCard(S.waste[n-1],"w",(n>=2||right)?cw*0.5:0,0,2,false));
   $("score").textContent=S.score;
   $("streak").textContent=S.streak>=2?"Streak \u00D7"+S.streak:"";
-  $("high").textContent="High score "+Math.max(stats.pHigh,0);
+  $("high").textContent="High score "+Math.max(stats.pHigh10,0);
   $("passText").textContent="Pass "+S.pass+" of "+MAX_PASSES;
   var pips=$("pips");pips.textContent="";
   for(var q=1;q<=MAX_PASSES;q++){var d=document.createElement("span");d.className="pip"+(q<=S.pass?" used":"");pips.appendChild(d);}

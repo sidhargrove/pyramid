@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Pyramid Solitaire</title>
+<meta name="theme-color" content="#0c3322">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pyramid">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Figtree:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one phone screen on green felt. The pyramid on top, the stock and waste
+   under it with the score beside them, two thumb-sized buttons at the bottom. */
+:root{
+  --night:#0c3322;      /* felt at the top */
+  --dusk:#16543a;       /* felt mid-table */
+  --ember:#0a2a1c;      /* shaded table edge */
+  --papyrus:#f5eedc;    /* card face */
+  --ink:#1c2233;        /* black suits, text on cards */
+  --blood:#b02a20;      /* red suits */
+  --gold:#e6b84a;       /* selection, accents */
+  --lapis:#7d1f2a;      /* card backs */
+  --mist:#b4d4c0;       /* quiet text on the felt */
+  --display:"Marcellus", "Palatino Linotype", Georgia, serif;
+  --body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --cw:46px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:radial-gradient(120% 80% at 50% 42%,var(--dusk) 0%,var(--night) 70%,var(--ember) 100%) fixed var(--night);
+  color:var(--papyrus);font-family:var(--body);
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;overflow:hidden;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+.app{height:100%;max-width:760px;margin:0 auto;padding:12px 16px 14px;display:flex;flex-direction:column;gap:10px}
+
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:400;font-size:26px;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--gold)}
+.rule{font-size:13px;color:var(--mist);margin:2px 0 0}
+.record{font-size:13px;color:var(--mist);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.play{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:14px;position:relative}
+.top{display:flex;align-items:flex-start;gap:calc(var(--cw)*.2);height:calc(var(--cw)*1.4)}
+.slot{position:relative;width:var(--cw);height:calc(var(--cw)*1.4);flex:none}
+.slot.waste{width:calc(var(--cw)*1.5)}
+.slot::before{content:"";position:absolute;left:0;top:0;width:var(--cw);height:100%;border:1.5px dashed rgba(230,184,74,.35);border-radius:calc(var(--cw)*.1)}
+.hud{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.hud .lbl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--mist)}
+.hud .score{font-family:var(--display);font-size:calc(var(--cw)*.6 + 6px);line-height:1;font-variant-numeric:tabular-nums}
+.pass{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mist)}
+.pips{display:flex;gap:4px}
+.pip{width:9px;height:9px;transform:rotate(45deg);border:1.5px solid var(--gold)}
+.pip.used{background:var(--gold)}
+
+.stage{position:relative;height:calc(var(--cw)*5.6);flex:none}
+.stage::before{ /* the pyramid's silhouette on the horizon */
+  content:"";position:absolute;left:50%;top:-4%;width:calc(var(--cw)*8.6);height:108%;transform:translateX(-50%);
+  background:linear-gradient(180deg,rgba(230,184,74,.16),rgba(230,184,74,.03));
+  clip-path:polygon(50% 0,100% 100%,0 100%);pointer-events:none;
+}
+
+.card{
+  position:absolute;left:0;top:0;width:var(--cw);height:calc(var(--cw)*1.4);padding:0;
+  border:1px solid rgba(28,34,51,.45);border-radius:calc(var(--cw)*.1);
+  background:linear-gradient(160deg,#fffaf0,var(--papyrus) 55%,#e7dcc2);color:var(--ink);
+  box-shadow:0 calc(var(--cw)*-.03) calc(var(--cw)*.09) rgba(0,0,0,.38),0 calc(var(--cw)*.05) calc(var(--cw)*.12) rgba(0,0,0,.45);
+  font-family:var(--body);font-weight:800;transition:transform .12s ease,filter .12s ease;
+}
+.card.red{color:var(--blood)}
+.card .rk{position:absolute;top:5%;left:9%;font-size:calc(var(--cw)*.36);line-height:1;letter-spacing:-.04em}
+.card .st{position:absolute;top:6%;right:8%;font-size:calc(var(--cw)*.3);line-height:1;font-weight:500}
+.card .big{position:absolute;left:0;right:0;bottom:9%;text-align:center;font-size:calc(var(--cw)*.6);line-height:1;font-weight:500}
+.card.covered{filter:brightness(.66) saturate(.8);cursor:default}
+.card.sel{transform:translateY(-9%);box-shadow:0 0 0 3px var(--gold),0 calc(var(--cw)*.1) calc(var(--cw)*.2) rgba(0,0,0,.55)}
+.card.out{transition:transform .17s ease,opacity .17s ease;opacity:0;transform:scale(.72)}
+.card:focus-visible,.btn:focus-visible,.stock:focus-visible{outline:3px solid #fff;outline-offset:2px}
+
+.stock{
+  position:absolute;left:0;top:0;width:var(--cw);height:100%;padding:0;border-radius:calc(var(--cw)*.1);
+  border:1px solid rgba(0,0,0,.5);color:var(--gold);font-family:var(--display);font-size:calc(var(--cw)*.42);
+  background:
+    repeating-linear-gradient(45deg,rgba(230,184,74,.22) 0 2px,transparent 2px 9px),
+    repeating-linear-gradient(-45deg,rgba(230,184,74,.22) 0 2px,transparent 2px 9px),
+    var(--lapis);
+  box-shadow:inset 0 0 0 3px var(--lapis),inset 0 0 0 4.5px rgba(230,184,74,.7),0 calc(var(--cw)*.05) calc(var(--cw)*.12) rgba(0,0,0,.45);
+  font-variant-numeric:tabular-nums;
+}
+.stock span{background:var(--lapis);padding:.05em .28em;border-radius:.3em}
+.stock.empty{background:none;box-shadow:none;border:0;font-family:var(--body);font-weight:700;font-size:calc(var(--cw)*.24);line-height:1.15}
+.stock.empty span{background:none;padding:0}
+.stock.empty .ico{display:block;font-size:calc(var(--cw)*.5);font-weight:500}
+.stock.empty[disabled]{color:var(--mist);opacity:.55;cursor:default}
+
+footer{display:flex;gap:12px}
+.btn{flex:1;min-height:50px;border-radius:12px;border:1.5px solid var(--gold);background:rgba(6,30,20,.55);font-weight:700;font-size:16px;letter-spacing:.02em}
+.btn.primary{background:var(--gold);color:var(--night)}
+.btn[disabled]{opacity:.38;cursor:default}
+.btn:not([disabled]):active{transform:translateY(1px)}
+
+.overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(4,20,13,.66);z-index:50}
+.overlay.on{display:flex}
+.panel{width:100%;max-width:340px;background:var(--night);border:1.5px solid var(--gold);border-radius:16px;padding:24px 20px 20px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.panel h2{font-family:var(--display);font-weight:400;font-size:30px;margin:0 0 6px;color:var(--gold);text-wrap:balance}
+.panel p{margin:0 0 18px;color:var(--mist);font-size:15px}
+.panel .row{display:flex;gap:10px}
+@media (prefers-reduced-motion:reduce){.card,.card.out{transition:none}}
+@media (max-height:520px){h1{font-size:20px}.rule{display:none}.btn{min-height:42px}.app{gap:6px;padding-top:8px;padding-bottom:8px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Pyramid</h1>
+      <p class="rule">Pair cards that add up to 13. Kings go alone.</p>
+    </div>
+    <div class="record" id="record"></div>
+  </header>
+
+  <div class="play" id="play">
+    <div class="stage" id="stage"></div>
+    <div class="top">
+      <div class="slot" id="stockSlot"></div>
+      <div class="slot waste" id="wasteSlot"></div>
+      <div class="hud">
+        <span class="lbl">Score</span>
+        <span class="score" id="score">0</span>
+        <span class="pass"><span id="passText">Pass 1 of 3</span><span class="pips" id="pips"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <button class="btn" id="undo" type="button">Undo</button>
+    <button class="btn" id="newGame" type="button">New game</button>
+  </footer>
+</div>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+  <div class="panel">
+    <h2 id="ovTitle"></h2>
+    <p id="ovText"></p>
+    <div class="row">
+      <button class="btn" id="ovUndo" type="button">Undo last move</button>
+      <button class="btn primary" id="ovNew" type="button">New game</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+var SUITS=["♠︎","♥︎","♦︎","♣︎"];
+var SUIT_NAMES=["spades","hearts","diamonds","clubs"];
+var RANK_NAMES=["Ace","2","3","4","5","6","7","8","9","10","Jack","Queen","King"];
+var MAX_PASSES=3, PAIR_POINTS=5, CLEAR_BONUS=100;
+var SAVE_KEY="pyramid13.game.v1", STATS_KEY="pyramid13.stats.v1";
+
+// Pyramid slots 0..27, row r (0..6), position i (0..r)
+var POS=[];
+for(var r=0;r<7;r++)for(var i=0;i<=r;i++)POS.push({r:r,i:i});
+function idx(r,i){return r*(r+1)/2+i;}
+function val(c){return c%13+1;}
+function suit(c){return Math.floor(c/13);}
+
+var S=null;            // game state (plain JSON)
+var sel=null;          // selected ref: "p<k>", "w" (waste top), "u" (waste card under the top)
+var busy=false;
+var stats={played:0,won:0};
+
+function load(key){try{var t=localStorage.getItem(key);return t?JSON.parse(t):null;}catch(e){return null;}}
+function save(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch(e){}}
+
+function newDeal(){
+  var d=[];for(var c=0;c<52;c++)d.push(c);
+  for(var j=51;j>0;j--){var k=Math.floor(Math.random()*(j+1));var t=d[j];d[j]=d[k];d[k]=t;}
+  S={pyr:d.slice(0,28),stock:d.slice(28),waste:[],pass:1,score:0,over:null,history:[],started:false,winCounted:false};
+  sel=null;
+}
+
+// ---------- rules ----------
+function kidsLeft(k){
+  var p=POS[k];if(p.r===6)return [];
+  return [idx(p.r+1,p.i),idx(p.r+1,p.i+1)].filter(function(x){return S.pyr[x]!==null;});
+}
+function exposed(k){return S.pyr[k]!==null&&kidsLeft(k).length===0;}
+// A card with one card left on top of it may be paired with that card if they add up to 13.
+function semi(k){
+  if(S.pyr[k]===null)return -1;
+  var kl=kidsLeft(k);
+  if(kl.length!==1||!exposed(kl[0]))return -1;
+  return val(S.pyr[k])+val(S.pyr[kl[0]])===13?kl[0]:-1;
+}
+function underPairs(){
+  var n=S.waste.length;
+  return n>=2&&val(S.waste[n-1])+val(S.waste[n-2])===13;
+}
+function cardOf(ref){
+  if(ref==="w")return S.waste[S.waste.length-1];
+  if(ref==="u")return S.waste[S.waste.length-2];
+  return S.pyr[+ref.slice(1)];
+}
+function isFree(ref){
+  if(ref==="w")return S.waste.length>0;
+  if(ref==="u")return false;
+  return exposed(+ref.slice(1));
+}
+function canSelect(ref){
+  if(ref==="w")return S.waste.length>0;
+  if(ref==="u")return underPairs();
+  var k=+ref.slice(1);
+  return exposed(k)||semi(k)>=0;
+}
+function pairOK(a,b){
+  if(a===b)return false;
+  var ca=cardOf(a),cb=cardOf(b);
+  if(ca===undefined||cb===undefined||ca===null||cb===null)return false;
+  if(val(ca)+val(cb)!==13)return false;
+  if(a==="u"||b==="u")return a==="w"||b==="w";
+  var fa=isFree(a),fb=isFree(b);
+  if(fa&&fb)return true;
+  if(fa&&b[0]==="p"&&a[0]==="p")return semi(+b.slice(1))===+a.slice(1);
+  if(fb&&a[0]==="p"&&b[0]==="p")return semi(+a.slice(1))===+b.slice(1);
+  return false;
+}
+function hasMoves(){
+  var free=[];
+  for(var k=0;k<28;k++){
+    if(S.pyr[k]===null)continue;
+    if(exposed(k))free.push(S.pyr[k]);
+    else if(semi(k)>=0)return true;
+  }
+  if(S.waste.length)free.push(S.waste[S.waste.length-1]);
+  if(underPairs())return true;
+  for(var a=0;a<free.length;a++){
+    if(val(free[a])===13)return true;
+    for(var b=a+1;b<free.length;b++)if(val(free[a])+val(free[b])===13)return true;
+  }
+  return false;
+}
+function canDraw(){return S.stock.length>0;}
+function canFlip(){return S.stock.length===0&&S.waste.length>0&&S.pass<MAX_PASSES;}
+
+// ---------- moves ----------
+function snapshot(){
+  S.history.push({pyr:S.pyr.slice(),stock:S.stock.slice(),waste:S.waste.slice(),pass:S.pass,score:S.score});
+  if(!S.started){S.started=true;stats.played++;save(STATS_KEY,stats);}
+}
+function settle(){
+  if(S.pyr.every(function(c){return c===null;})){
+    S.score+=CLEAR_BONUS;S.over="win";
+    if(!S.winCounted){S.winCounted=true;stats.won++;save(STATS_KEY,stats);}
+  }else if(!canDraw()&&!canFlip()&&!hasMoves()){
+    S.over="lose";
+  }
+  sel=null;save(SAVE_KEY,S);render();
+}
+function removeRefs(refs){
+  busy=true;
+  refs.forEach(function(ref){var el=document.querySelector('[data-ref="'+ref+'"]');if(el)el.classList.add("out");});
+  var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  setTimeout(function(){
+    snapshot();
+    var pops=refs.indexOf("u")>=0?2:(refs.indexOf("w")>=0?1:0);
+    while(pops-->0)S.waste.pop();
+    refs.forEach(function(ref){if(ref[0]==="p")S.pyr[+ref.slice(1)]=null;});
+    S.score+=PAIR_POINTS;
+    busy=false;settle();
+  },reduce?0:180);
+}
+function tap(ref){
+  if(busy||S.over||!canSelect(ref))return;
+  if(val(cardOf(ref))===13&&isFree(ref)){removeRefs([ref]);return;}
+  if(sel===ref){sel=null;render();return;}
+  if(sel&&pairOK(sel,ref)){removeRefs([sel,ref]);return;}
+  sel=ref;render();
+}
+function tapStock(){
+  if(busy||S.over)return;
+  if(canDraw()){snapshot();S.waste.push(S.stock.pop());settle();}
+  else if(canFlip()){snapshot();S.stock=S.waste.reverse();S.waste=[];S.pass++;settle();}
+}
+function undo(){
+  if(busy||!S.history.length)return;
+  var h=S.history.pop();
+  S.pyr=h.pyr;S.stock=h.stock;S.waste=h.waste;S.pass=h.pass;S.score=h.score;S.over=null;
+  sel=null;save(SAVE_KEY,S);render();
+}
+function newGame(){if(busy)return;newDeal();save(SAVE_KEY,S);render();}
+
+// ---------- drawing ----------
+var stage=document.getElementById("stage"),stockSlot=document.getElementById("stockSlot"),
+    wasteSlot=document.getElementById("wasteSlot"),play=document.getElementById("play"),cw=46;
+
+function cardEl(c,ref,x,y,z,covered){
+  var b=document.createElement("button");
+  b.type="button";b.className="card"+(suit(c)===1||suit(c)===2?" red":"")+(covered?" covered":"")+(sel===ref?" sel":"");
+  b.dataset.ref=ref;b.style.left=x+"px";b.style.top=y+"px";b.style.zIndex=z;
+  b.setAttribute("aria-label",RANK_NAMES[val(c)-1]+" of "+SUIT_NAMES[suit(c)]+(covered?", covered":""));
+  if(covered){b.setAttribute("aria-disabled","true");b.tabIndex=-1;}
+  b.innerHTML='<span class="rk">'+RANKS[val(c)-1]+'</span><span class="st">'+SUITS[suit(c)]+'</span><span class="big">'+SUITS[suit(c)]+'</span>';
+  b.addEventListener("click",function(){tap(ref);});
+  return b;
+}
+function render(){
+  var ch=cw*1.4,pitch=cw*1.08,mid=stage.clientWidth/2;
+  stage.textContent="";
+  for(var k=0;k<28;k++){
+    var c=S.pyr[k];if(c===null)continue;
+    var p=POS[k],x=mid+(p.i-p.r/2)*pitch-cw/2,y=p.r*ch*0.5;
+    stage.appendChild(cardEl(c,"p"+k,Math.round(x),Math.round(y),p.r+1,!canSelect("p"+k)));
+  }
+  // stock
+  stockSlot.textContent="";
+  var sb=document.createElement("button");sb.type="button";sb.className="stock";
+  if(S.stock.length){
+    sb.innerHTML="<span>"+S.stock.length+"</span>";
+    sb.setAttribute("aria-label","Draw a card. "+S.stock.length+" left in the stock");
+  }else if(canFlip()){
+    sb.className="stock empty";sb.innerHTML='<span class="ico">↻</span><span>Flip</span>';
+    sb.setAttribute("aria-label","Flip the waste pile over to start pass "+(S.pass+1));
+  }else{
+    sb.className="stock empty";sb.disabled=true;sb.innerHTML="<span>Stock<br>empty</span>";
+  }
+  sb.addEventListener("click",tapStock);stockSlot.appendChild(sb);
+  // waste: the top card, with the card under it peeking out on the left
+  wasteSlot.textContent="";
+  var n=S.waste.length;
+  if(n>=2)wasteSlot.appendChild(cardEl(S.waste[n-2],"u",0,0,1,!underPairs()));
+  if(n>=1)wasteSlot.appendChild(cardEl(S.waste[n-1],"w",n>=2?Math.round(cw*0.5):0,0,2,false));
+  // hud
+  document.getElementById("score").textContent=S.score;
+  document.getElementById("passText").textContent="Pass "+S.pass+" of "+MAX_PASSES;
+  var pips=document.getElementById("pips");pips.textContent="";
+  for(var q=1;q<=MAX_PASSES;q++){var d=document.createElement("span");d.className="pip"+(q<=S.pass?" used":"");pips.appendChild(d);}
+  document.getElementById("record").textContent=stats.played?("Won "+stats.won+" of "+stats.played):"First game";
+  document.getElementById("undo").disabled=!S.history.length;
+  // end of game
+  var ov=document.getElementById("overlay");
+  ov.classList.toggle("on",!!S.over);
+  if(S.over==="win"){
+    document.getElementById("ovTitle").textContent="You Win!";
+    document.getElementById("ovText").textContent="Pyramid cleared on pass "+S.pass+". Final score "+S.score+", including the "+CLEAR_BONUS+" point bonus.";
+    document.getElementById("ovUndo").style.display="none";
+  }else if(S.over==="lose"){
+    var left=S.pyr.filter(function(c){return c!==null;}).length;
+    document.getElementById("ovTitle").textContent="Game Over – No More Moves";
+    document.getElementById("ovText").textContent=left+" card"+(left===1?"":"s")+" left in the pyramid. Score "+S.score+".";
+    document.getElementById("ovUndo").style.display="";
+  }
+}
+function fit(){
+  var w=play.clientWidth,h=play.clientHeight;
+  cw=Math.max(26,Math.min(104,w/7.48,(h-14)/7));
+  document.documentElement.style.setProperty("--cw",cw+"px");
+  if(S)render();
+}
+
+document.getElementById("undo").addEventListener("click",undo);
+document.getElementById("ovUndo").addEventListener("click",undo);
+document.getElementById("newGame").addEventListener("click",newGame);
+document.getElementById("ovNew").addEventListener("click",newGame);
+
+function valid(g){return g&&Array.isArray(g.pyr)&&g.pyr.length===28&&Array.isArray(g.stock)&&Array.isArray(g.waste)&&Array.isArray(g.history);}
+function start(data){
+  stats=load(STATS_KEY)||stats;
+  var saved=valid(data)?data:load(SAVE_KEY);
+  if(valid(saved)){S=saved;sel=null;}else{newDeal();}
+  if(window.ResizeObserver)new ResizeObserver(fit).observe(play);else window.addEventListener("resize",fit);
+  fit();
+}
+var hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(function(){return S;});
+if(hot&&hot.ready)hot.ready(start);else start((hot&&hot.data)||{});
+})();
+</script>
+<script>
+if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}
+</script>
+</body>
+</html>

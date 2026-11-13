@@ -58,7 +58,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:10px}
 #kview{flex-direction:column}
 .kstage{position:relative;flex:1;min-height:0}
 
-.top{display:flex;align-items:flex-start;gap:calc(var(--cw)*.2);height:calc(var(--cw)*1.4)}
+.top{display:flex;align-items:flex-start;gap:calc(var(--cw)*.2);min-height:calc(var(--cw)*1.4)}
 .slot{position:relative;width:var(--cw);height:calc(var(--cw)*1.4);flex:none}
 .slot.waste{width:calc(var(--cw)*1.5)}
 .slot::before{content:"";position:absolute;left:0;top:0;width:var(--cw);height:100%;border:1.5px dashed rgba(230,184,74,.35);border-radius:calc(var(--cw)*.1)}
@@ -68,6 +68,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .top.right .slot.waste::before{left:auto;right:0}
 .hud .lbl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--mist)}
 .hud .score{font-family:var(--display);font-size:calc(var(--cw)*.6 + 6px);line-height:1;font-variant-numeric:tabular-nums}
+.hud .streak{color:var(--gold);font-weight:800;margin-left:6px}
+.hud .high{font-size:13px;color:var(--mist);font-variant-numeric:tabular-nums}
 .pass{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mist)}
 .pips{display:flex;gap:4px}
 .pip{width:9px;height:9px;transform:rotate(45deg);border:1.5px solid var(--gold)}
@@ -157,9 +159,10 @@ footer{display:flex;gap:12px}
         <div class="slot" id="stockSlot"></div>
         <div class="slot waste" id="wasteSlot"></div>
         <div class="hud">
-          <span class="lbl">Score</span>
+          <span class="lbl">Score <b class="streak" id="streak"></b></span>
           <span class="score" id="score">0</span>
           <span class="pass"><span id="passText">Pass 1 of 3</span><span class="pips" id="pips"></span></span>
+          <span class="high" id="high">High score 0</span>
         </div>
       </div>
     </div>
@@ -216,7 +219,7 @@ var RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 var SUITS=["♠︎","♥︎","♦︎","♣︎"];
 var SUIT_NAMES=["spades","hearts","diamonds","clubs"];
 var RANK_NAMES=["Ace","2","3","4","5","6","7","8","9","10","Jack","Queen","King"];
-var MAX_PASSES=3, PAIR_POINTS=5, CLEAR_BONUS=100;
+var MAX_PASSES=3, PAIR_POINTS=10, STREAK_STEP=1, CLEAR_BONUS=200;
 var SAVE_KEY="pyramid13.game.v1", KSAVE_KEY="pyramid13.klondike.v1", STATS_KEY="pyramid13.stats.v1", SET_KEY="pyramid13.settings.v1";
 
 function val(c){return c%13+1;}
@@ -233,7 +236,7 @@ function save(key,v){try{localStorage.setItem(key,JSON.stringify(v));}catch(e){}
 function $(id){return document.getElementById(id);}
 
 var settings={game:"pyramid",hand:"left",draw:1};
-var stats={played:0,won:0,kPlayed:0,kWon:0};
+var stats={played:0,won:0,kPlayed:0,kWon:0,pHigh:0};
 var busy=false, cw=46;
 var play=$("play"),stage=$("stage"),kstage=$("kstage"),stockSlot=$("stockSlot"),wasteSlot=$("wasteSlot");
 
@@ -257,7 +260,7 @@ var S=null, sel=null;   // sel: "p<k>", "w" (waste top), "u" (waste card under t
 
 function pNew(){
   var d=shuffled();
-  S={pyr:d.slice(0,28),stock:d.slice(28),waste:[],pass:1,score:0,over:null,history:[],started:false,winCounted:false};
+  S={pyr:d.slice(0,28),stock:d.slice(28),waste:[],pass:1,score:0,streak:0,over:null,newHigh:false,history:[],started:false,winCounted:false};
   sel=null;
 }
 function kidsLeft(k){
@@ -322,7 +325,7 @@ function hasMoves(){
 function canDraw(){return S.stock.length>0;}
 function canFlip(){return S.stock.length===0&&S.waste.length>0&&S.pass<MAX_PASSES;}
 function pSnap(){
-  S.history.push({pyr:S.pyr.slice(),stock:S.stock.slice(),waste:S.waste.slice(),pass:S.pass,score:S.score});
+  S.history.push({pyr:S.pyr.slice(),stock:S.stock.slice(),waste:S.waste.slice(),pass:S.pass,score:S.score,streak:S.streak});
   if(!S.started){S.started=true;stats.played++;save(STATS_KEY,stats);}
 }
 function pSettle(){
@@ -332,6 +335,8 @@ function pSettle(){
   }else if(!canDraw()&&!canFlip()&&!hasMoves()){
     S.over="lose";
   }
+  // a finished game, won or lost, counts toward the high score
+  if(S.over&&S.score>stats.pHigh){stats.pHigh=S.score;S.newHigh=true;save(STATS_KEY,stats);}
   sel=null;save(SAVE_KEY,S);render();
 }
 function removeRefs(refs){
@@ -343,7 +348,8 @@ function removeRefs(refs){
     var pops=refs.indexOf("u")>=0?2:(refs.indexOf("w")>=0?1:0);
     while(pops-->0)S.waste.pop();
     refs.forEach(function(ref){if(ref[0]==="p")S.pyr[+ref.slice(1)]=null;});
-    S.score+=PAIR_POINTS;
+    // each match in a row is worth one point more than the last; tapping the deck ends the run
+    S.score+=PAIR_POINTS+S.streak*STREAK_STEP;S.streak++;
     busy=false;pSettle();
   },reduce?0:180);
 }
@@ -356,13 +362,13 @@ function pTap(ref){
 }
 function pStock(){
   if(busy||S.over)return;
-  if(canDraw()){pSnap();S.waste.push(S.stock.pop());pSettle();}
-  else if(canFlip()){pSnap();S.stock=S.waste.reverse();S.waste=[];S.pass++;pSettle();}
+  if(canDraw()){pSnap();S.streak=0;S.waste.push(S.stock.pop());pSettle();}
+  else if(canFlip()){pSnap();S.streak=0;S.stock=S.waste.reverse();S.waste=[];S.pass++;pSettle();}
 }
 function pUndo(){
   if(busy||!S.history.length)return;
   var h=S.history.pop();
-  S.pyr=h.pyr;S.stock=h.stock;S.waste=h.waste;S.pass=h.pass;S.score=h.score;S.over=null;
+  S.pyr=h.pyr;S.stock=h.stock;S.waste=h.waste;S.pass=h.pass;S.score=h.score;S.streak=h.streak||0;S.over=null;S.newHigh=false;
   sel=null;save(SAVE_KEY,S);render();
 }
 function pCard(c,ref,x,y,z,covered){
@@ -396,6 +402,8 @@ function renderP(){
   if(n>=2)wasteSlot.appendChild(pCard(S.waste[n-2],"u",0,0,1,!underPairs()));
   if(n>=1)wasteSlot.appendChild(pCard(S.waste[n-1],"w",(n>=2||right)?cw*0.5:0,0,2,false));
   $("score").textContent=S.score;
+  $("streak").textContent=S.streak>=2?"Streak \u00D7"+S.streak:"";
+  $("high").textContent="High score "+Math.max(stats.pHigh,0);
   $("passText").textContent="Pass "+S.pass+" of "+MAX_PASSES;
   var pips=$("pips");pips.textContent="";
   for(var q=1;q<=MAX_PASSES;q++){var d=document.createElement("span");d.className="pip"+(q<=S.pass?" used":"");pips.appendChild(d);}
@@ -594,12 +602,12 @@ function render(){
   if(over==="win"){
     $("ovTitle").textContent="You Win!";
     $("ovText").textContent=k?("Every card is home. Final score "+K.score+"."):
-      ("Pyramid cleared on pass "+S.pass+". Final score "+S.score+", including the "+CLEAR_BONUS+" point bonus.");
+      ("Pyramid cleared on pass "+S.pass+". Final score "+S.score+", including the "+CLEAR_BONUS+" point bonus."+(S.newHigh?" New high score!":""));
     $("ovUndo").style.display="none";
   }else if(over==="lose"){
     var left=S.pyr.filter(function(c){return c!==null;}).length;
     $("ovTitle").textContent="Game Over – No More Moves";
-    $("ovText").textContent=left+" card"+(left===1?"":"s")+" left in the pyramid. Score "+S.score+".";
+    $("ovText").textContent=left+" card"+(left===1?"":"s")+" left in the pyramid. Score "+S.score+"."+(S.newHigh?" New high score!":"");
     $("ovUndo").style.display="";
   }
   $("handL").setAttribute("aria-pressed",String(settings.hand!=="right"));
@@ -609,7 +617,7 @@ function render(){
 }
 function fit(){
   var w=play.clientWidth,h=play.clientHeight;
-  cw=isK()?Math.max(26,Math.min(104,w/7.48,h/6.2)):Math.max(26,Math.min(104,w/7.48,(h-14)/7));
+  cw=isK()?Math.max(26,Math.min(104,w/7.48,h/6.2)):Math.max(26,Math.min(104,w/7.48,(h-44)/7));
   document.documentElement.style.setProperty("--cw",cw+"px");
   if(S&&K)render();
 }
@@ -642,7 +650,7 @@ function start(data){
     if(se.draw===3)settings.draw=3;
   }
   var p=validP(data.P)?data.P:(validP(data)?data:load(SAVE_KEY));
-  if(validP(p)){S=p;sel=null;}else pNew();
+  if(validP(p)){S=p;sel=null;if(typeof S.streak!=="number")S.streak=0;}else pNew();
   var kk=validK(data.K)?data.K:load(KSAVE_KEY);
   if(validK(kk)){K=kk;ksel=null;}else kNew();
   if(window.ResizeObserver)new ResizeObserver(fit).observe(play);else window.addEventListener("resize",fit);
